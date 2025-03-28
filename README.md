@@ -140,7 +140,7 @@ app.post('/twilio/status', (req, res) => {
 
 Frontend – where users trigger messages (scales with CDN or loadbalancer)
 
-Backend API – receives the request, sends to queue (scales with containerization and K8s or ECS, and then loadbalancing like NGINX, ALB, or K8s again)
+Backend API – receives the request, sends to queue (scales with containerization and K8s or ECS, or API Gateway which auto-scales and then loadbalancing like NGINX, ALB, or K8s again)
 
 Queue – stores message jobs temporarily (use SQS, RabbitMQ, or Kafka)
 
@@ -245,4 +245,189 @@ MediaUrl0=https://api.twilio.com/2010-04-01/Accounts/.../Media/AB123...
 MediaContentType0=image/jpeg
 ```
 
-## Architechture
+Perfect — this is a great architecture. Here’s the **full logic flow** based on what you're building, including upload, notification, search, and scaling details:
+
+---
+
+## 📁 File Upload & Notification System – Full Logic Flow
+
+---
+
+### 🧱 1. **Frontend (React App on ECS)**
+- User selects a file and clicks "Upload"
+- React app:
+  - Requests a **pre-signed S3 URL** from backend
+  - **A pre-signed URL is a temporary, permissioned URL that allows someone else to perform an S3 action (like upload or download) without needing AWS credentials.**
+  - Uploads the file directly to S3 via that URL
+  - Sends metadata to API Gateway (e.g., file name, UUID, type, upload time)
+
+---
+
+### 🔁 2. **Backend (API Gateway → Lambda or ECS API service)**
+- Receives metadata from frontend
+- Adds a message to **SQS Upload Queue**:
+
+```json
+{
+  "uuid": "abc123",
+  "fileName": "resume.pdf",
+  "s3Url": "https://bucket.s3.amazonaws.com/abc123.pdf",
+  "uploadedAt": "2025-03-28T12:00:00Z",
+  "userId": "user_42"
+}
+```
+
+---
+
+### 🏗️ 3. **ECS Worker Service (Polls SQS)**
+- Runs on a schedule or long-polling from the queue
+- When a message arrives:
+  1. Validates and transforms the data
+  2. Saves the file metadata into the **database** (e.g., Postgres or DynamoDB)
+  Here you go — the **`FileMetadata`** table with a couple of sample entries shown in plain table format:
+
+---
+
+#### 📄 `FileMetadata`
+
+| id        | user_id | file_name     | file_type | s3_url                                                  | size_kb | uploaded_at          | tags                    |
+|-----------|---------|---------------|-----------|----------------------------------------------------------|---------|-----------------------|--------------------------|
+| file-001  | user-42 | invoice.pdf   | pdf       | https://s3.amazonaws.com/bucket/invoice.pdf             | 210     | 2025-03-28 12:00:00   | {finance, invoice}       |
+| file-002  | user-88 | profile.jpg   | jpg       | https://cdn.example.com/user/profile.jpg                | 140     | 2025-03-28 12:05:23   | {avatar, profile}        |
+| file-003  | user-42 | tax_doc.pdf   | pdf       | https://s3.amazonaws.com/bucket/tax_doc_2025.pdf        | 520     | 2025-03-28 13:15:10   | {finance, taxes, upload} |
+
+---
+
+  4. Checks **notification rules table** (optional feature)
+     - e.g., “If file type = .pdf → send SMS”
+  5. If a match, adds a new message to a **notification queue** for processing
+
+ #### Lambda can poll (but only behind the scenes)
+ 
+<img width="530" alt="Screenshot 2025-03-28 at 6 48 59 PM" src="https://github.com/user-attachments/assets/834df220-d9c2-4905-afe4-a6ac6bb6e09e" />
+
+
+  #### Long polling example
+
+  ```javascript
+  app.get('/api/notifications/longpoll', async (req, res) => {
+  const userId = req.query.userId;
+  const since = parseInt(req.query.since);
+
+  const startTime = Date.now();
+  const timeout = 30000;         // max wait time (30s)
+  const checkInterval = 1000;    // check every 1s
+
+  const checkForData = async () => {
+    const newNotifications = await getNewNotifications(userId, since);
+
+    if (newNotifications.length > 0) {
+      // 🟢 🎯 NEW DATA FOUND → respond immediately
+      return res.json(newNotifications);
+    }
+
+    if (Date.now() - startTime > timeout) {
+      // 🟡 Timeout hit → respond with nothing
+      return res.json([]);
+    }
+
+    // 🔁 Wait 1s and check again
+    setTimeout(checkForData, checkInterval);
+  };
+
+  // 🚀 Start the recursive wait loop
+  checkForData();
+  });
+  ```
+
+### 3.5 Rules table
+
+<img width="669" alt="Screenshot 2025-03-28 at 6 39 15 PM" src="https://github.com/user-attachments/assets/03ea49d0-f617-497c-9269-35b0c2714299" />
+
+🧾 `NotificationRules` Table (Real Layout)
+
+| id        | user_id | event_type  | file_type | file_name_regex     | min_size_kb | notify_via | target         | is_active |
+|-----------|---------|-------------|-----------|----------------------|--------------|-------------|----------------|-----------|
+| rule-1    | user-42 | file_upload | pdf       | `^invoice.*\.pdf$`   | 100          | sms         | +1234567890     | true      |
+| rule-2    | user-42 | file_upload | jpg       | `null`               | null         | email       | user@mail.com   | true      |
+| rule-3    | user-88 | file_upload | null      | `.*\.zip$`           | 5000         | push        | user-88-token   | true      |
+
+🔹 **Each row is one rule**.  
+🔹 **Each column defines a piece of that rule’s logic**.
+
+No — `min_size_kb` would **NOT** prevent the file upload.
+It only affects whether a notification gets triggered after the upload.
+
+---
+
+### 📩 4. **Notification System**
+- Separate ECS worker or Lambda polls **notification queue**
+- For each message:
+  - Sends SMS/email using **Twilio, SES**, etc.
+  - Tracks status via webhook callbacks (optional)
+  - Stores log in the DB
+
+Webhook data can either be stored in a notitifcation logs table:
+
+<img width="768" alt="Screenshot 2025-03-28 at 6 45 38 PM" src="https://github.com/user-attachments/assets/19395e83-dbf9-453b-9454-af89e35e45ee" />
+
+Or we can store it in the metadata table of the image
+
+---
+
+### 🔍 5. **Search Service (Lambda or ECS microservice)**
+- Called by the frontend
+- Queries the **file metadata DB**
+- Filter by filename, tags, upload date, user
+- Optionally generates **pre-signed S3 URLs** so the frontend can show/download the file
+
+---
+
+### 🧠 6. **Database Schema (example)**
+
+**📄 FileMetadata**
+| Field         | Type          |
+|---------------|---------------|
+| uuid          | UUID (PK)     |
+| fileName      | String        |
+| s3Url         | String        |
+| uploadedAt    | Timestamp     |
+| userId        | String        |
+| tags          | Array<String> |
+
+**📣 NotificationRules**
+| Field         | Type          |
+|---------------|---------------|
+| userId        | String        |
+| fileType      | String        |
+| notifyVia     | String (SMS/Email) |
+| criteria      | JSON or fields |
+
+**📬 NotificationLog**
+| Field         | Type          |
+|---------------|---------------|
+| uuid          | UUID          |
+| status        | String        |
+| sentAt        | Timestamp     |
+
+---
+
+## 📈 Scaling Components
+
+| Component          | Scaling Method                       |
+|--------------------|--------------------------------------|
+| React Frontend     | ECS with Load Balancer (ALB)         |
+| API Gateway        | Serverless, autoscaling              |
+| S3                 | Scales automatically                 |
+| SQS                | Scales with volume                   |
+| ECS Workers        | Auto-scaled based on queue depth     |
+| Search Lambda      | Serverless, on-demand                |
+
+---
+
+
+
+
+
+
+

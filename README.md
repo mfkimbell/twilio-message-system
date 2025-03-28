@@ -199,6 +199,20 @@ In a typical Token Bucket setup, We check and refill tokens on every request —
 
 <img width="788" alt="Screenshot 2025-03-28 at 5 50 58 PM" src="https://github.com/user-attachments/assets/33305fbc-9d95-4dfa-88ab-53c8104d74df" />
 
+#### Sliding Window 
+
+Sliding Window Rate Limiting ensures that:
+
+“No more than N requests are allowed in the last X seconds, regardless of exactly when those requests occurred.”
+
+Instead of counting tokens or spacing requests, it tracks actual timestamps of each request and counts how many are within the current rolling window.
+
+<img width="772" alt="Screenshot 2025-03-28 at 6 01 00 PM" src="https://github.com/user-attachments/assets/05f01548-a359-4a73-bd77-05bec8b637ce" />
+
+<img width="775" alt="Screenshot 2025-03-28 at 6 01 23 PM" src="https://github.com/user-attachments/assets/9c270b47-f108-4eef-9721-678a708c7835" />
+
+
+
 ### Worker Side Throttling
 
 ```javascript

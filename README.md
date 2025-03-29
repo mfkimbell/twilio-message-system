@@ -14,6 +14,10 @@ SMS MMS VOICE EMAIL ETC
 - It lets you **send/receive messages and calls via code** — no telecom hardware required.
 - Used for 2FA, notifications, support bots, alerts, appointment reminders, and more.
 
+## Customers like **AirB&B** Lyft and UBER
+
+<img width="671" alt="Screenshot 2025-03-28 at 7 14 26 PM" src="https://github.com/user-attachments/assets/f5f20720-b719-48f3-ba16-6c13366c7fd4" />
+
 ---
 
 ## 📦 Key APIs You Should Know

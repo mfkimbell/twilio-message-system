@@ -1,6 +1,107 @@
 # twilio-message-system
 
-## twilio api info
+# Overview
+
+Ah, got it — here’s **everything you need to know about Twilio for a software engineering interview**, focused, practical, and tight 👇
+
+---
+
+## 🧠 What is Twilio?
+
+- **Twilio** is a cloud-based platform that provides **communication APIs** for **SMS, MMS, voice, email (SendGrid), WhatsApp, and video**.
+- It lets you **send/receive messages and calls via code** — no telecom hardware required.
+- Used for 2FA, notifications, support bots, alerts, appointment reminders, and more.
+
+---
+
+## 📦 Key APIs You Should Know
+
+### ✅ **SMS / MMS API**
+- Send SMS with `messages.create()`
+- Optional: add `mediaUrl` for MMS (e.g., images, PDFs)
+- Can include a `statusCallback` URL to get delivery updates
+
+### ✅ **Voice API**
+- Twilio calls your backend to fetch TwiML (XML instructions)
+- You can play audio, gather digits (IVR), or forward calls
+
+### ✅ **Webhooks**
+- Twilio sends HTTP POSTs to your server for:
+  - Inbound SMS (`/twilio/incoming`)
+  - Message status (`/twilio/status`)
+  - Call events (answered, ended, failed, etc.)
+
+---
+
+## 🔁 Twilio Status Callbacks
+
+- When you send a message, you can provide a `statusCallback` URL.
+- Twilio will notify you as the message goes from:
+  - `queued` → `sent` → `delivered` or `failed`
+
+### Example Payload:
+```json
+{
+  "MessageSid": "SMxxxx",
+  "MessageStatus": "delivered",
+  "To": "+1234567890"
+}
+```
+
+You’d store this in a `NotificationLog` table.
+
+---
+
+## ⚠️ Handling Failures
+
+- **Retries**: Twilio will retry webhook calls if you don’t return a `200 OK`.
+- **Dead Letter Queue**: Use SQS DLQ to store failed messages for investigation/retry.
+- Add logs + monitoring to track bounce rates or carrier issues.
+
+---
+
+## 📈 Scaling with Twilio
+
+- **ECS Workers** or Lambdas send messages in bulk (scale with SQS queue depth).
+- Respect Twilio’s **rate limits** (based on country/carrier).
+- Use **worker-side throttling** or rate limiting (token bucket, Redis, etc.)
+
+---
+
+## 📸 Media (MMS)
+
+- To **send MMS**, use a `mediaUrl` that points to a public (or pre-signed) file.
+- To **receive MMS**, Twilio posts media URLs to your webhook (in `MediaUrl0`, `ContentType0`).
+
+---
+
+## 🧠 Pro Tips for Interviews
+
+✅ Be ready to explain:
+- How your app sends messages using Twilio
+- How delivery status is tracked and logged
+- How you handle failures (retries, DLQ)
+- How you decouple sending with a queue + worker
+- How Twilio talks to your backend (webhooks)
+
+---
+
+## 🧪 Sample Flow
+
+1. User triggers event (e.g. file uploaded)
+2. Backend sends message via Twilio SMS API
+3. Includes `statusCallback` to `/twilio/status`
+4. Worker logs `queued` → `sent` → `delivered`
+5. Failed? Push to DLQ, alert, or retry
+
+Worker logs it from the status api route:
+
+<img width="771" alt="Screenshot 2025-03-28 at 7 06 08 PM" src="https://github.com/user-attachments/assets/be0a0058-a1bc-434f-ada7-ea6a1f1d0cae" />
+
+---
+
+
+# Project specific
 
 ### Twilio Message SID
 When you send a message via Twilio, you get back a unique MessageSid, like:

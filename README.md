@@ -2,13 +2,15 @@
 
 # Overview
 
-Ah, got it — here’s **everything you need to know about Twilio for a software engineering interview**, focused, practical, and tight 👇
+<img width="1143" alt="Screenshot 2025-03-28 at 7 07 51 PM" src="https://github.com/user-attachments/assets/33d914a8-12c6-4dd3-a133-2993fb119751" />
 
----
+
+SMS MMS VOICE EMAIL ETC
 
 ## 🧠 What is Twilio?
 
-- **Twilio** is a cloud-based platform that provides **communication APIs** for **SMS, MMS, voice, email (SendGrid), WhatsApp, and video**.
+### **Twilio** is a cloud-based platform that provides **communication APIs** for **SMS, MMS, voice, email (SendGrid), WhatsApp, and video**.
+### Twilio is a **tool** to help solve certain communication prolems in produciton applications
 - It lets you **send/receive messages and calls via code** — no telecom hardware required.
 - Used for 2FA, notifications, support bots, alerts, appointment reminders, and more.
 
